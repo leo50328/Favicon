@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>透明Favicon 插入工具</title>
+  <style>
+    body { 
+      font-family: sans-serif; 
+      padding: 2em; 
+      background: #1e1e1e;
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      gap: 1em;
+    }
+    input[type="file"] { 
+      border: 1px solid #444;
+      padding: 5px;
+      background: #333;
+      color: #fff;
+      cursor: pointer;
+    }
+    .button-group {
+      display: flex;
+      gap: 1em;
+    }
+    button {
+      flex-grow: 1; /* 讓按鈕平均分配空間 */
+      padding: 10px 15px;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 1.0em;
+      transition: background-color 0.3s;
+    }
+    #copyButton {
+      background-color: #007bff; /* 複製 (藍色) */
+    }
+    #exportButton {
+      background-color: #28a745; /* 匯出 (綠色) */
+    }
+    button:hover:enabled {
+      opacity: 0.85;
+    }
+    button:disabled {
+      background-color: #6c757d;
+      cursor: not-allowed;
+    }
+    .status-message {
+      margin-top: 1em;
+      padding: 0.8em;
+      background-color: #333;
+      border: 1px solid #555;
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h1>透明Favicon 插入工具</h1>
+  
+  <input type="file" id="fileInput" accept=".html" />
+  
+  <div class="button-group">
+    <button id="copyButton" onclick="copyModified()" disabled>複製</button>
+    <button id="exportButton" onclick="downloadModified()" disabled>匯出</button>
+  </div>
+  
+  <div id="statusMessage" class="status-message">請上傳 HTML 檔案。</div>
+
+  <script>
+    // 核心插入程式碼
+    const insertCode = '  <link id="favicon" rel="icon" href="" />';
+    const scriptCode = `\n  <script>\n    const canvas = document.createElement('canvas');\n    canvas.width = canvas.height = 64;\n    const ctx = canvas.getContext('2d');\n    ctx.clearRect(0, 0, 64, 64);\n    document.getElementById('favicon').href = canvas.toDataURL();\n  <\/script>`;
+
+    let modifiedContent = '';
+    const copyButton = document.getElementById('copyButton');
+    const exportButton = document.getElementById('exportButton');
+    const statusMessage = document.getElementById('statusMessage');
+
+    function updateButtons(isDisabled) {
+        copyButton.disabled = isDisabled;
+        exportButton.disabled = isDisabled;
+        copyButton.textContent = '複製'; // 重置按鈕文字
+    }
+
+    document.getElementById('fileInput').addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      statusMessage.textContent = `正在讀取檔案: ${file.name}...`;
+      updateButtons(true);
+
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        const content = event.target.result;
+        
+        let headInserted = false;
+        let bodyInserted = false;
+
+        // 插入 <link> 到 <head>
+        let tempContent = content.replace(/<head[^>]*>/i, match => {
+          headInserted = true;
+          return match + '\n' + insertCode;
+        });
+        
+        // 插入 <script> 到 </body>
+        modifiedContent = tempContent.replace(/<\/body>/i, match => {
+          bodyInserted = true;
+          return scriptCode + '\n' + match;
+        });
+
+        if (!headInserted || !bodyInserted) {
+          statusMessage.textContent = "❌ 錯誤：HTML 結構可能不完整，未成功插入 (缺少 <head> 或 </body>)。";
+        } else {
+          statusMessage.textContent = `✅ 檔案 "${file.name}" 已成功修改，請選擇「複製」或「匯出」。`;
+          updateButtons(false);
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    function copyModified() {
+      if (!modifiedContent) return;
+      
+      navigator.clipboard.writeText(modifiedContent)
+        .then(() => {
+          // 視覺回饋
+          copyButton.textContent = '已複製！';
+          setTimeout(() => { copyButton.textContent = '複製'; }, 2000);
+          statusMessage.textContent = '📋 修改後的程式碼已複製到剪貼簿。';
+        })
+        .catch(err => {
+          console.error('複製失敗:', err);
+          statusMessage.textContent = '❌ 複製失敗，請檢查瀏覽器權限或嘗試「匯出」。';
+        });
+    }
+
+    function downloadModified() {
+      if (!modifiedContent) return;
+      
+      const blob = new Blob([modifiedContent], { type: "text/html" });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = "modified.html";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      statusMessage.textContent = "🎉 檔案已匯出！請檢查您的下載資料夾。";
+    }
+  </script>
+</body>
+</html>
