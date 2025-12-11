@@ -5,140 +5,258 @@
   <title>透明Favicon 插入工具</title>
   <style>
     body { 
-      font-family: sans-serif; 
-      padding: 2em; 
-      background: #1e1e1e;
-      color: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* 字體更現代 */
+      padding: 2.5em; 
+      background: #121212; /* 更深的黑色背景 */
+      color: #e0e0e0; /* 淺色文字 */
       display: flex;
       flex-direction: column;
-      gap: 1em;
+      gap: 1.5em;
+      max-width: 600px; /* 限制寬度，更 Q 版 */
+      margin: 0 auto; /* 置中 */
     }
-    input[type="file"] { 
-      border: 1px solid #444;
-      padding: 5px;
-      background: #333;
+    h1 { 
+      color: #90caf9; /* 標題顏色 */
+      text-align: center;
+      margin-bottom: 0.5em;
+    }
+    h2 {
+      font-size: 1.1em;
+      color: #b39ddb; /* 步驟標題顏色 */
+      margin-bottom: 0.8em;
+      border-bottom: 1px solid #333;
+      padding-bottom: 0.3em;
+    }
+    .step-group {
+      border: 1px solid #333;
+      padding: 1.2em;
+      border-radius: 8px;
+      background: #1e1e1e; /* 步驟區塊背景 */
+    }
+    input[type="file"], input[type="text"] { 
+      padding: 8px;
+      border: 1px solid #555;
+      background: #2a2a2a;
       color: #fff;
+      border-radius: 4px;
+      width: 100%;
+      box-sizing: border-box;
       cursor: pointer;
     }
+    label {
+      display: block;
+      margin-bottom: 0.5em;
+    }
+    /* --- 按鈕排版優化 --- */
     .button-group {
       display: flex;
       gap: 1em;
+      margin-top: 1.5em; /* 獨立區隔 */
     }
     button {
-      flex-grow: 1; /* 讓按鈕平均分配空間 */
-      padding: 10px 15px;
-      color: white;
+      flex-grow: 1; 
+      padding: 12px 15px; /* 增加點擊面積 */
       border: none;
       cursor: pointer;
       font-size: 1.0em;
-      transition: background-color 0.3s;
+      font-weight: bold;
+      border-radius: 5px;
+      transition: background-color 0.2s, transform 0.1s;
     }
-    #copyButton {
-      background-color: #007bff; /* 複製 (藍色) */
+    #copyButton { background-color: #1976d2; } /* 複製 (深藍) */
+    #exportButton { background-color: #388e3c; } /* 匯出 (深綠) */
+    button:hover:enabled { 
+      background-color: #1565c0; 
+      transform: translateY(-1px);
     }
-    #exportButton {
-      background-color: #28a745; /* 匯出 (綠色) */
-    }
-    button:hover:enabled {
-      opacity: 0.85;
-    }
-    button:disabled {
-      background-color: #6c757d;
+    button:disabled { 
+      background-color: #424242; 
+      color: #9e9e9e;
       cursor: not-allowed;
+      transform: none;
     }
     .status-message {
-      margin-top: 1em;
-      padding: 0.8em;
+      padding: 1em;
       background-color: #333;
-      border: 1px solid #555;
+      border-left: 5px solid #ff9800; /* 狀態訊息左邊條 */
       color: #ccc;
+      border-radius: 4px;
     }
   </style>
 </head>
 <body>
   <h1>透明Favicon 插入工具</h1>
+
+  <div class="step-group">
+    <h2>步驟 1: 選擇 Favicon 類型</h2>
+    <label><input type="radio" name="faviconType" value="transparent" checked> 透明 Favicon (Canvas 生成)</label>
+    <label><input type="radio" name="faviconType" value="image"> 自訂圖片 Favicon (須上傳圖片)</label>
+  </div>
   
-  <input type="file" id="fileInput" accept=".html" />
-  
+  <div class="step-group">
+    <h2>步驟 2: 上傳檔案</h2>
+    <label for="htmlFileInput">HTML 檔案 (.html):</label>
+    <input type="file" id="htmlFileInput" accept=".html" />
+    
+    <div id="imageInputContainer" style="margin-top: 1em;">
+      <label for="imageFileInput">Favicon 圖片 (.ico, .png, .jpg):</label>
+      <input type="file" id="imageFileInput" accept=".ico,.png,.jpg" disabled />
+    </div>
+  </div>
+
   <div class="button-group">
     <button id="copyButton" onclick="copyModified()" disabled>複製</button>
     <button id="exportButton" onclick="downloadModified()" disabled>匯出</button>
   </div>
   
-  <div id="statusMessage" class="status-message">請上傳 HTML 檔案。</div>
+  <div id="statusMessage" class="status-message">請先上傳 HTML 檔案並選擇 Favicon 類型。</div>
 
   <script>
-    // 核心插入程式碼
-    const insertCode = '  <link id="favicon" rel="icon" href="" />';
-    const scriptCode = `\n  <script>\n    const canvas = document.createElement('canvas');\n    canvas.width = canvas.height = 64;\n    const ctx = canvas.getContext('2d');\n    ctx.clearRect(0, 0, 64, 64);\n    document.getElementById('favicon').href = canvas.toDataURL();\n  <\/script>`;
+    // --- 核心變數與程式碼片段 (不變) ---
+    let htmlContent = null;
+    let iconDataURL = null; 
+    const LINK_TAG = '  <link id="favicon" rel="icon" href="" />';
+    const CANVAS_SCRIPT = `\n  <script>\n    const canvas = document.createElement('canvas');\n    canvas.width = canvas.height = 64;\n    const ctx = canvas.getContext('2d');\n    ctx.clearRect(0, 0, 64, 64);\n    document.getElementById('favicon').href = canvas.toDataURL();\n  <\/script>`;
 
-    let modifiedContent = '';
+    // --- DOM 元素 ---
+    const htmlFileInput = document.getElementById('htmlFileInput');
+    const imageFileInput = document.getElementById('imageFileInput');
+    const radioButtons = document.getElementsByName('faviconType');
     const copyButton = document.getElementById('copyButton');
     const exportButton = document.getElementById('exportButton');
     const statusMessage = document.getElementById('statusMessage');
 
+    // --- 輔助函數 (簡化) ---
     function updateButtons(isDisabled) {
         copyButton.disabled = isDisabled;
         exportButton.disabled = isDisabled;
-        copyButton.textContent = '複製'; // 重置按鈕文字
+        if (!isDisabled) copyButton.textContent = '複製'; // 確保成功後按鈕文字重置
     }
 
-    document.getElementById('fileInput').addEventListener('change', function (e) {
-      const file = e.target.files[0];
-      if (!file) return;
+    function checkReadyState() {
+      const selectedType = document.querySelector('input[name="faviconType"]:checked').value;
+      let isReady = false;
+      
+      if (!htmlContent) {
+          statusMessage.textContent = "請上傳 HTML 檔案。";
+      } else if (selectedType === 'transparent') {
+          isReady = true;
+          statusMessage.textContent = "✅ HTML 檔案已讀取，準備生成透明 Favicon。";
+      } else if (selectedType === 'image') {
+          if (iconDataURL) {
+              isReady = true;
+              statusMessage.textContent = "✅ HTML 檔案與圖片已讀取，準備嵌入圖片 Favicon。";
+          } else {
+              statusMessage.textContent = "請上傳您的自訂 Favicon 圖片。";
+          }
+      }
+      updateButtons(!isReady);
+      return isReady;
+    }
 
-      statusMessage.textContent = `正在讀取檔案: ${file.name}...`;
-      updateButtons(true);
+    function generateModifiedContent() {
+      if (!htmlContent) return 'ERROR: HTML content missing.';
+      
+      const selectedType = document.querySelector('input[name="faviconType"]:checked').value;
+      let contentToModify = htmlContent;
+      let headInserted = false;
+      let bodyInserted = false;
+      let modifiedContent = '';
+      
+      // 1. 插入 <link> 到 <head>
+      let tempContent = contentToModify.replace(/<head[^>]*>/i, match => {
+          headInserted = true;
+          return match + '\n' + LINK_TAG;
+      });
+
+      if (!headInserted) return 'ERROR: Missing <head> tag.';
+
+      // 2. 處理 Favicon 內容
+      if (selectedType === 'transparent') {
+          // 插入 Canvas 腳本
+          modifiedContent = tempContent.replace(/<\/body>/i, match => {
+              bodyInserted = true;
+              return CANVAS_SCRIPT + '\n' + match;
+          });
+          if (!bodyInserted) return 'ERROR: Missing </body> tag for script insertion.';
+      } else if (selectedType === 'image' && iconDataURL) {
+          // 替換 <link> 中的 href 屬性
+          const imageLinkTag = `  <link id="favicon" rel="icon" href="${iconDataURL}" />`;
+          modifiedContent = tempContent.replace(LINK_TAG, imageLinkTag);
+      } else {
+          return 'ERROR: Image data missing or invalid mode.';
+      }
+      
+      return modifiedContent;
+    }
+
+    // --- 事件監聽器 (保持不變) ---
+
+    // 監聽模式切換
+    radioButtons.forEach(radio => {
+        radio.addEventListener('change', function() {
+            const isImageMode = this.value === 'image';
+            imageFileInput.disabled = !isImageMode;
+            if (!isImageMode) {
+                imageFileInput.value = '';
+                iconDataURL = null; 
+            }
+            if (htmlContent) checkReadyState();
+        });
+    });
+
+    // 監聽 HTML 檔案上傳
+    htmlFileInput.addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) { htmlContent = null; updateButtons(true); statusMessage.textContent = "請上傳 HTML 檔案。"; return; }
 
       const reader = new FileReader();
       reader.onload = function (event) {
-        const content = event.target.result;
-        
-        let headInserted = false;
-        let bodyInserted = false;
-
-        // 插入 <link> 到 <head>
-        let tempContent = content.replace(/<head[^>]*>/i, match => {
-          headInserted = true;
-          return match + '\n' + insertCode;
-        });
-        
-        // 插入 <script> 到 </body>
-        modifiedContent = tempContent.replace(/<\/body>/i, match => {
-          bodyInserted = true;
-          return scriptCode + '\n' + match;
-        });
-
-        if (!headInserted || !bodyInserted) {
-          statusMessage.textContent = "❌ 錯誤：HTML 結構可能不完整，未成功插入 (缺少 <head> 或 </body>)。";
-        } else {
-          statusMessage.textContent = `✅ 檔案 "${file.name}" 已成功修改，請選擇「複製」或「匯出」。`;
-          updateButtons(false);
-        }
+        htmlContent = event.target.result;
+        checkReadyState();
       };
       reader.readAsText(file);
     });
 
-    function copyModified() {
-      if (!modifiedContent) return;
+    // 監聽圖片檔案上傳
+    imageFileInput.addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) { iconDataURL = null; checkReadyState(); return; }
       
-      navigator.clipboard.writeText(modifiedContent)
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        iconDataURL = event.target.result;
+        checkReadyState();
+      };
+      reader.readAsDataURL(file); 
+    });
+
+
+    // --- 複製與下載功能 ---
+
+    function copyModified() {
+      const finalContent = generateModifiedContent();
+      if (finalContent.startsWith('ERROR') || !finalContent) {
+        statusMessage.textContent = '❌ 處理失敗，請檢查狀態訊息。';
+        return;
+      }
+      
+      navigator.clipboard.writeText(finalContent)
         .then(() => {
-          // 視覺回饋
           copyButton.textContent = '已複製！';
           setTimeout(() => { copyButton.textContent = '複製'; }, 2000);
           statusMessage.textContent = '📋 修改後的程式碼已複製到剪貼簿。';
-        })
-        .catch(err => {
-          console.error('複製失敗:', err);
-          statusMessage.textContent = '❌ 複製失敗，請檢查瀏覽器權限或嘗試「匯出」。';
         });
     }
 
     function downloadModified() {
-      if (!modifiedContent) return;
+      const finalContent = generateModifiedContent();
+      if (finalContent.startsWith('ERROR') || !finalContent) {
+        statusMessage.textContent = '❌ 處理失敗，請檢查狀態訊息。';
+        return;
+      }
       
-      const blob = new Blob([modifiedContent], { type: "text/html" });
+      const blob = new Blob([finalContent], { type: "text/html" });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = "modified.html";
